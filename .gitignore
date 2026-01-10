@@ -1,0 +1,25 @@
+# Backend
+node_modules/
+dist/
+.env
+*.log
+debug.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test files
+*.test.ts
+*.spec.ts
+coverage/
+
+# Temporary files
+*.tmp
+*.temp
+uploads/*
+!uploads/.gitkeep
