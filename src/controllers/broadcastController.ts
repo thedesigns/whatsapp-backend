@@ -90,6 +90,7 @@ export const createBroadcast = async (req: AuthRequest, res: Response): Promise<
         status: 'PENDING',
         mediaId,
         mediaType,
+        enableChatbot: req.body.enableChatbot !== undefined ? req.body.enableChatbot : true,
       },
     });
 

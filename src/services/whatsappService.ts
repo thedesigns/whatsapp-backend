@@ -821,6 +821,7 @@ const handleIncomingMessage = async (orgId: string, message: any, contactInfo: a
     global.io.to(`org:${orgId}`).emit('new_message', {
       message: newMessage,
       conversationId: conversation.id,
+      conversation: updatedConv,
       contact,
     });
   }
@@ -854,9 +855,24 @@ const handleIncomingMessage = async (orgId: string, message: any, contactInfo: a
       contact
     });
 
-    processChatbotFlow(orgId, contact.id, contact.waId, content, newMessage).catch(err => {
-      console.error('🤖 Chatbot execution error:', err);
-    });
+    // Check if chatbot is enabled for this conversation (Broadcast override)
+    let shouldTriggerChatbot = true;
+    if (updatedConv.broadcastId) {
+       const broadcast = await (prisma as any).broadcast.findUnique({
+         where: { id: updatedConv.broadcastId },
+         select: { enableChatbot: true }
+       });
+       if (broadcast && broadcast.enableChatbot === false) {
+         console.log(`🤖 Chatbot SKIPPED for ${contact.phoneNumber} (Broadcast override)`);
+         shouldTriggerChatbot = false;
+       }
+    }
+
+    if (shouldTriggerChatbot) {
+      processChatbotFlow(orgId, contact.id, contact.waId, content, newMessage).catch(err => {
+        console.error('🤖 Chatbot execution error:', err);
+      });
+    }
   }
 
   return newMessage;

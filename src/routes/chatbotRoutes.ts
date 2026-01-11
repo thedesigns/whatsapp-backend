@@ -11,6 +11,7 @@ router.post('/test', chatbotController.testFlow);
 router.get('/flows/:id', chatbotController.getFlow);
 router.post('/flows/:id', chatbotController.saveFlow);
 router.delete('/flows/:id', chatbotController.deleteFlow);
+router.patch('/flows/:id/status', chatbotController.toggleFlowStatus);
 
 export default router;
 

@@ -234,6 +234,7 @@ model Broadcast {
   organizationId   String
   mediaId          String?
   mediaType        String?
+  enableChatbot    Boolean              @default(true)
   organization     Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   recipients       BroadcastRecipient[]
   conversations    Conversation[]       // Conversations that originated from this broadcast

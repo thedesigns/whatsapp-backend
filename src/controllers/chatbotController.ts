@@ -193,3 +193,26 @@ export const deleteFlow = async (req: AuthRequest, res: Response): Promise<void>
     res.status(500).json({ error: 'Failed to delete flow' });
   }
 };
+
+export const toggleFlowStatus = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.body;
+    const organizationId = req.user?.organizationId;
+
+    if (!organizationId) {
+      res.status(403).json({ error: 'Organization context required' });
+      return;
+    }
+
+    const flow = await (prisma as any).flow.update({
+      where: { id, organizationId },
+      data: { isActive: !!isActive }
+    });
+
+    res.json({ success: true, isActive: flow.isActive, message: `Flow ${flow.isActive ? 'enabled' : 'disabled'}` });
+  } catch (error) {
+    console.error('Toggle flow status error:', error);
+    res.status(500).json({ error: 'Failed to update flow status' });
+  }
+};
