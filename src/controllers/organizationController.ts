@@ -189,19 +189,29 @@ export const updateOrganization = async (req: AuthRequest, res: Response): Promi
 };
 
 // Delete/Deactivate organization (SUPER_ADMIN only)
+// Delete/Deactivate organization (SUPER_ADMIN only)
 export const deleteOrganization = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
 
-    await (prisma as any).organization.update({
-      where: { id },
-      data: { isActive: false },
+    // Hard delete: Deleting the organization will auto-delete related data (Messages, Contacts, etc.)
+    // via Prisma Cascade, BUT 'User' does not have Cascade in schema, so we delete users first.
+    await (prisma as any).$transaction(async (tx: any) => {
+      // 1. Delete all users (sub-agents) linked to this org
+      await tx.user.deleteMany({
+        where: { organizationId: id }
+      });
+
+      // 2. Delete the organization (Triggers cascade for messages, conversations, etc.)
+      await tx.organization.delete({
+        where: { id }
+      });
     });
 
-    res.json({ message: 'Organization deactivated successfully' });
+    res.json({ message: 'Organization and all related data (agents, messages) permanently deleted' });
   } catch (error) {
     console.error('Delete organization error:', error);
-    res.status(500).json({ error: 'Failed to deactivate organization' });
+    res.status(500).json({ error: 'Failed to delete organization' });
   }
 };
 
