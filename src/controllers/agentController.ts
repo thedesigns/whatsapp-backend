@@ -421,3 +421,35 @@ export const updatePushToken = async (req: AuthRequest, res: Response): Promise<
     res.status(500).json({ error: 'Failed to update push token' });
   }
 };
+
+// Test push notification for the current user
+export const testPushNotification = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    const user = await (prisma as any).user.findUnique({
+      where: { id: userId },
+      select: { pushToken: true }
+    });
+
+    if (!user?.pushToken) {
+      res.status(400).json({ error: 'User does not have a push token registered' });
+      return;
+    }
+
+    const { sendPushNotification } = await import('../services/notificationService.js');
+    
+    console.log(`🧪 Sending test push notification to user: ${userId}, token: ${user.pushToken}`);
+    
+    await sendPushNotification(
+      user.pushToken,
+      'Test Notification',
+      'If you see this, push notifications are working! ✅',
+      { test: true }
+    );
+
+    res.json({ message: 'Test notification sent' });
+  } catch (error) {
+    console.error('❌ Test push notification error:', error);
+    res.status(500).json({ error: 'Failed to send test push notification' });
+  }
+};

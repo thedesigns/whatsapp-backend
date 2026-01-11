@@ -31,4 +31,7 @@ router.post('/:id/reset-password', authorize('ADMIN'), agentController.resetAgen
 // Update push token for the current user
 router.post('/push-token', agentController.updatePushToken);
 
+// Test push notification for the current user
+router.post('/test-push', agentController.testPushNotification);
+
 export default router;
