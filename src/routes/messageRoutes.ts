@@ -4,7 +4,10 @@ import { authMiddleware, authorize } from '../middleware/authMiddleware.js';
 import multer from 'multer';
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
+});
 
 // All routes require authentication
 router.use(authMiddleware);
