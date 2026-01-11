@@ -178,9 +178,13 @@ export const updateOrganization = async (req: AuthRequest, res: Response): Promi
 
     const updatedOrg = await (prisma as any).organization.findUnique({ where: { id } });
     res.json({ message: 'Organization updated successfully', organization: updatedOrg });
-  } catch (error) {
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      res.status(400).json({ error: 'Email address already in use by another account' });
+      return;
+    }
     console.error('Update organization error:', error);
-    res.status(500).json({ error: 'Failed to update organization' });
+    res.status(500).json({ error: error.message || 'Failed to update organization' });
   }
 };
 
