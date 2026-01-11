@@ -26,6 +26,10 @@ export const createPlan = async (req: Request, res: Response): Promise<void> => 
     });
     res.json(plan);
   } catch (error: any) {
+    if (error.code === 'P2002') {
+      res.status(400).json({ error: 'A plan with this name already exists' });
+      return;
+    }
     res.status(500).json({ error: error.message });
   }
 };
@@ -46,6 +50,10 @@ export const updatePlan = async (req: Request, res: Response): Promise<void> => 
     });
     res.json(plan);
   } catch (error: any) {
+    if (error.code === 'P2002') {
+      res.status(400).json({ error: 'A plan with this name already exists' });
+      return;
+    }
     res.status(500).json({ error: error.message });
   }
 };
