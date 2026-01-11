@@ -28,4 +28,7 @@ router.delete('/:id', authorize('ADMIN'), agentController.deleteAgent);
 // Reset password (Admin only)
 router.post('/:id/reset-password', authorize('ADMIN'), agentController.resetAgentPassword);
 
+// Update push token for the current user
+router.post('/push-token', agentController.updatePushToken);
+
 export default router;

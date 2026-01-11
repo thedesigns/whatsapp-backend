@@ -395,3 +395,29 @@ export const getAgentStats = async (req: AuthRequest, res: Response): Promise<vo
     res.status(500).json({ error: 'Failed to get agent stats' });
   }
 };
+
+// Update push token for the current user
+export const updatePushToken = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { pushToken } = req.body;
+    const userId = req.user?.id;
+
+    console.log(`📱 Received push token update request for user: ${userId}, token: ${pushToken?.substring(0, 10)}...`);
+
+    if (!userId) {
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
+    }
+
+    await (prisma as any).user.update({
+      where: { id: userId },
+      data: { pushToken },
+    });
+
+    console.log(`✅ Push token updated for user: ${userId}`);
+    res.json({ message: 'Push token updated' });
+  } catch (error) {
+    console.error('❌ Update push token error:', error);
+    res.status(500).json({ error: 'Failed to update push token' });
+  }
+};

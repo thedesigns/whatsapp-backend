@@ -2,6 +2,7 @@ import { getWhatsappClient, WHATSAPP_CONFIG } from '../config/whatsapp.js';
 import { prisma } from '../config/database.js';
 import { Direction, MessageStatus, MessageType } from '@prisma/client';
 import { processChatbotFlow } from './chatbotService.js';
+import { sendPushNotification } from './notificationService.js';
 import axios from 'axios';
 import crypto from 'crypto';
 
@@ -825,6 +826,25 @@ const handleIncomingMessage = async (orgId: string, message: any, contactInfo: a
   }
 
   console.log('✅ Message processed:', newMessage.id);
+
+  // Send push notification to assigned agent if any
+  const assignedAgentId = updatedConv.assignedAgentId;
+  if (assignedAgentId && Direction.INCOMING === newMessage.direction) {
+    const agent = await (prisma as any).user.findUnique({
+      where: { id: assignedAgentId },
+      select: { pushToken: true, pushNotifications: true }
+    });
+
+    if (agent?.pushToken && agent?.pushNotifications !== false) {
+      const title = `New message from ${contact.name || contact.phoneNumber}`;
+      const body = content || `Received a ${message.type}`;
+      
+      sendPushNotification(agent.pushToken, title, body, {
+        conversationId: conversation.id,
+        type: 'NEW_MESSAGE'
+      }).catch(err => console.error('❌ Push notification trigger error:', err));
+    }
+  }
 
   // Forward to external webhook and trigger chatbot for incoming messages
   if (Direction.INCOMING === newMessage.direction) {

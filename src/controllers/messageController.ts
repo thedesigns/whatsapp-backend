@@ -632,6 +632,7 @@ export const uploadMedia = async (req: AuthRequest, res: Response): Promise<void
 export const proxyMedia = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { mediaId } = req.params;
+    const { format } = req.query; // Optional: ?format=mp3 for iOS audio conversion
     const organizationId = req.user?.organizationId;
     const isSuperAdmin = req.user?.role === 'SUPER_ADMIN';
 
@@ -667,7 +668,6 @@ export const proxyMedia = async (req: AuthRequest, res: Response): Promise<void>
     const result = await getMediaUrl(targetOrgId, mediaId);
 
     if (result.success && result.url) {
-      // 2. Instead of redirecting, we pipe the stream to handle auth correctly
       const { getWhatsappClient } = await import('../config/whatsapp.js');
       const org = await (prisma as any).organization.findUnique({ 
         where: { id: targetOrgId } 
@@ -680,21 +680,92 @@ export const proxyMedia = async (req: AuthRequest, res: Response): Promise<void>
       
       const client = getWhatsappClient(org.accessToken);
       
+      // Download the media
       const response = await client.get(result.url, {
-        baseURL: '', // Override baseURL since we have the full URL
-        responseType: 'stream'
+        baseURL: '',
+        responseType: 'arraybuffer'
       });
 
-      // Set correct content type if available
-      if (result.mimeType) {
-        res.setHeader('Content-Type', result.mimeType);
-      }
-      if (result.fileSize) {
-        res.setHeader('Content-Length', result.fileSize);
+      const mimeType = result.mimeType || 'application/octet-stream';
+      const isAudioOgg = mimeType === 'audio/ogg' || mimeType.includes('opus');
+      
+      // Convert OGG/Opus to MP3 for iOS compatibility if requested
+      if (format === 'mp3' && isAudioOgg) {
+        console.log('🔄 Converting audio to MP3 for iOS...');
+        
+        const fs = await import('fs/promises');
+        const path = await import('path');
+        const { spawn } = await import('child_process');
+        const os = await import('os');
+        
+        // Create temp files
+        const tempDir = os.tmpdir();
+        const inputPath = path.join(tempDir, `${mediaId}_input.ogg`);
+        const outputPath = path.join(tempDir, `${mediaId}_output.mp3`);
+        
+        // Check if already converted and cached
+        try {
+          const cachedMp3 = await fs.readFile(outputPath);
+          console.log('📂 Using cached MP3 conversion');
+          res.setHeader('Content-Type', 'audio/mpeg');
+          res.setHeader('Content-Length', cachedMp3.length);
+          res.setHeader('Accept-Ranges', 'bytes');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.send(cachedMp3);
+          return;
+        } catch {
+          // Not cached, proceed with conversion
+        }
+        
+        // Write input file
+        await fs.writeFile(inputPath, Buffer.from(response.data));
+        
+        // Convert using ffmpeg
+        await new Promise<void>((resolve, reject) => {
+          const ffmpeg = spawn('ffmpeg', [
+            '-y', // Overwrite output
+            '-i', inputPath,
+            '-acodec', 'libmp3lame',
+            '-ab', '128k',
+            outputPath
+          ]);
+          
+          ffmpeg.on('close', (code) => {
+            if (code === 0) {
+              resolve();
+            } else {
+              reject(new Error(`ffmpeg exited with code ${code}`));
+            }
+          });
+          
+          ffmpeg.on('error', reject);
+        });
+        
+        // Read and send converted file
+        const mp3Buffer = await fs.readFile(outputPath);
+        
+        // Cleanup input file (keep output for cache)
+        await fs.unlink(inputPath).catch(() => {});
+        
+        console.log('✅ Audio conversion complete, size:', mp3Buffer.length);
+        
+        res.setHeader('Content-Type', 'audio/mpeg');
+        res.setHeader('Content-Length', mp3Buffer.length);
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.send(mp3Buffer);
+        return;
       }
 
-      // Pipe the stream directly to the response
-      response.data.pipe(res);
+      // Standard response (no conversion)
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Content-Length', response.data.length);
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', 'Range');
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+      
+      res.send(Buffer.from(response.data));
     } else {
       res.status(404).json({ error: 'Media not found on Meta or failed to resolve URL' });
     }
