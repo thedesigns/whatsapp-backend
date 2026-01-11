@@ -20,7 +20,8 @@ export const sendPushNotification = async (
     body,
     data,
     priority: 'high',
-    channelId: 'default',
+    channelId: 'messages', // Match the mobile channel ID
+    badge: 1,
   };
 
   try {
