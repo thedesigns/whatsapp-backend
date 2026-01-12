@@ -2,6 +2,7 @@ import { prisma } from '../config/database.js';
 import { sendWhatsAppMessage } from './whatsappService.js';
 import axios from 'axios';
 import fs from 'fs';
+import { createRazorpayLink, createStripeLink } from './paymentService.js';
 
 interface Node {
   id: string;
@@ -781,6 +782,81 @@ const executeFlow = async (session: any, waId: string, lastInput: string, inputD
             }
           }
           break;
+
+
+         case 'payment':
+            try {
+                const provider = node.data.provider || 'razorpay';
+                const amount = parseFloat(replaceVariables(node.data.amount || '0', variables));
+                const currency = replaceVariables(node.data.currency || 'INR', variables);
+                const description = replaceVariables(node.data.description || 'Payment Request', variables);
+                const msgBody = node.data.messageBody || 'Please complete your payment here: {{link}}';
+                
+                let payResult;
+                
+                if (provider === 'razorpay') {
+                    const keyId = replaceVariables(node.data.apiKey || '', variables);
+                    const keySecret = replaceVariables(node.data.apiSecret || '', variables);
+                    
+                    if (!keyId || !keySecret) throw new Error('Razorpay Keys Missing');
+                    
+                    payResult = await createRazorpayLink(
+                        amount, 
+                        currency, 
+                        description, 
+                        keyId, 
+                        keySecret,
+                        {
+                            name: variables['sender_name'],
+                            contact: variables['sender_mobile']
+                        }
+                    );
+                } else if (provider === 'stripe') {
+                    const secretKey = replaceVariables(node.data.apiKey || '', variables); // Stripe only needs secret
+                    
+                    if (!secretKey) throw new Error('Stripe Secret Key Missing');
+                    
+                    payResult = await createStripeLink(
+                        amount,
+                        currency,
+                        description,
+                        secretKey
+                    );
+                }
+                
+                if (payResult?.short_url) {
+                    variables['payment_link'] = payResult.short_url;
+                    variables['payment_id'] = payResult.id;
+                    log(`💰 Payment Link Generated: ${payResult.short_url}`);
+                    
+                    // Send Link Message
+                    const finalMsg = replaceVariables(msgBody, { ...variables, link: payResult.short_url });
+                    await sendWhatsAppMessage(session.organizationId, {
+                        to: waId,
+                        type: 'text',
+                        content: finalMsg
+                    });
+                    
+                    nextNodeId = edges.find(e => e.source === node.id && e.sourceHandle === 'success')?.target || null;
+                } else {
+                    throw new Error('Link generation returned null');
+                }
+            } catch (error: any) {
+                console.error(`❌ Payment Node Error (${node.id}):`, error.message);
+                
+                // Send error message if configured
+                if (node.data.errorMessage) {
+                   await sendWhatsAppMessage(session.organizationId, {
+                        to: waId,
+                        type: 'text',
+                        content: replaceVariables(node.data.errorMessage, variables)
+                    });
+                }
+                
+                nextNodeId = edges.find(e => e.source === node.id && e.sourceHandle === 'fail')?.target || null;
+            }
+            currentNodeId = nextNodeId;
+            break;
 
 
         case 'loop':

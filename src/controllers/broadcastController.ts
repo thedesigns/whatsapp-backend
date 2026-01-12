@@ -67,8 +67,8 @@ export const getBroadcastReport = async (req: AuthRequest, res: Response): Promi
 export const createBroadcast = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const organizationId = req.user?.organizationId;
-    const { name, templateName, templateLanguage, recipients, mediaId, mediaType } = req.body;
-
+    const { name, templateName, templateLanguage, recipients, mediaId, mediaType, scheduledAt } = req.body;
+    
     if (!organizationId) {
       res.status(403).json({ error: 'Organization context required' });
       return;
@@ -79,6 +79,22 @@ export const createBroadcast = async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
+    // Determine initial status based on scheduling
+    const now = new Date();
+    const scheduleDate = scheduledAt ? new Date(scheduledAt) : null;
+    
+    console.log(`🕒 Scheduling Debug:`);
+    console.log(`- Current Server Time (now): ${now.toISOString()}`);
+    console.log(`- Raw scheduledAt from Req: ${scheduledAt}`);
+    console.log(`- Parsed scheduleDate: ${scheduleDate ? scheduleDate.toISOString() : 'none'}`);
+
+    // Use a 30-second grace period to handle small clock drifts/latency
+    const isScheduledForFuture = scheduleDate && (scheduleDate.getTime() > now.getTime() + 30000);
+    const initialStatus = isScheduledForFuture ? 'SCHEDULED' : 'PENDING';
+    
+    console.log(`- isScheduledForFuture: ${isScheduledForFuture}`);
+    console.log(`- initialStatus: ${initialStatus}`);
+
     // 1. Create Broadcast record
     const broadcast = await (prisma as any).broadcast.create({
       data: {
@@ -87,7 +103,8 @@ export const createBroadcast = async (req: AuthRequest, res: Response): Promise<
         templateLanguage: templateLanguage || 'en',
         totalRecipients: recipients.length,
         organizationId,
-        status: 'PENDING',
+        status: initialStatus,
+        scheduledAt: scheduleDate,
         mediaId,
         mediaType,
         enableChatbot: req.body.enableChatbot !== undefined ? req.body.enableChatbot : true,
@@ -105,14 +122,22 @@ export const createBroadcast = async (req: AuthRequest, res: Response): Promise<
       })),
     });
 
-    // 3. Trigger sending in background (async)
-    broadcastService.startBroadcast(broadcast.id).catch(err => {
-      console.error(`🔥 Background broadcast failure for ${broadcast.id}:`, err);
-    });
+    // 3. Trigger sending in background only if NOT scheduled for future
+    if (!isScheduledForFuture) {
+      console.log(`🚀 Triggering immediate broadcast for ${broadcast.id}`);
+      broadcastService.startBroadcast(broadcast.id).catch(err => {
+        console.error(`🔥 Background broadcast failure for ${broadcast.id}:`, err);
+      });
+    } else {
+      console.log(`⏰ Broadcast ${broadcast.id} will be handled by scheduler at ${scheduleDate}`);
+    }
 
     res.status(201).json({
-      message: 'Broadcast started successfully',
+      message: isScheduledForFuture 
+        ? `Broadcast scheduled for ${scheduleDate?.toLocaleString()}` 
+        : 'Broadcast started successfully',
       broadcastId: broadcast.id,
+      status: initialStatus,
       totalRecipients: recipients.length
     });
 
