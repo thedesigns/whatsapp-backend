@@ -250,10 +250,14 @@ export const getApiKey = async (req: AuthRequest, res: Response): Promise<void> 
 
     const org = await (prisma as any).organization.findUnique({
       where: { id: orgId },
-      select: { apiKey: true }
+      select: { apiKey: true, externalWebhookUrl: true, externalWebhookSecret: true }
     });
 
-    res.json({ apiKey: org?.apiKey });
+    res.json({ 
+      apiKey: org?.apiKey || '',
+      externalWebhookUrl: org?.externalWebhookUrl || '',
+      externalWebhookSecret: org?.externalWebhookSecret || ''
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
