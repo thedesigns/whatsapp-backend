@@ -90,25 +90,35 @@ export const broadcastService = {
               });
 
               // Update conversation preview and link
-              const conversation = await (prisma as any).conversation.findFirst({
+              // First find contact by phone number, then find their conversation
+              const contact = await (prisma as any).contact.findFirst({
                 where: {
-                  contactId: (recipient as any).contactId || undefined, // Fallback if contactId isn't on recipient
-                  contact: { phoneNumber: recipient.phoneNumber },
+                  phoneNumber: recipient.phoneNumber,
                   organizationId: broadcast.organizationId
                 }
               });
 
-              if (conversation) {
-                await (prisma as any).conversation.update({
-                  where: { id: conversation.id },
-                  data: {
-                    lastMessageAt: new Date(),
-                    lastMessagePreview: `[Template: ${broadcast.templateName}]`,
-                    broadcastId: broadcast.id,
-                    broadcastName: broadcast.name,
-                    isReply: false, // Reset reply status since we just sent a new broadcast
+              if (contact) {
+                const conversation = await (prisma as any).conversation.findFirst({
+                  where: {
+                    contactId: contact.id,
+                    organizationId: broadcast.organizationId
                   }
                 });
+
+                if (conversation) {
+                  console.log(`📝 Updating conversation ${conversation.id} with broadcast: ${broadcast.name}`);
+                  await (prisma as any).conversation.update({
+                    where: { id: conversation.id },
+                    data: {
+                      lastMessageAt: new Date(),
+                      lastMessagePreview: `[Template: ${broadcast.templateName}]`,
+                      broadcastId: broadcast.id,
+                      broadcastName: broadcast.name,
+                      isReply: false, // Reset reply status since we just sent a new broadcast
+                    }
+                  });
+                }
               }
             } else {
               await (prisma as any).broadcastRecipient.update({
