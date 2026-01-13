@@ -229,6 +229,9 @@ export const sendTemplate = async (req: AuthRequest, res: Response): Promise<voi
       data: {
         lastMessageAt: new Date(),
         lastMessagePreview: `[Template: ${templateName}]`,
+        broadcastName: templateName, // Sync for badge display
+        broadcastId: null, // Clear old broadcast link if this is a manual template
+        isReply: false,
       },
     });
 

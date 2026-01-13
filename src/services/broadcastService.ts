@@ -88,6 +88,28 @@ export const broadcastService = {
                 where: { id: broadcastId },
                 data: { sentCount: { increment: 1 } },
               });
+
+              // Update conversation preview and link
+              const conversation = await (prisma as any).conversation.findFirst({
+                where: {
+                  contactId: (recipient as any).contactId || undefined, // Fallback if contactId isn't on recipient
+                  contact: { phoneNumber: recipient.phoneNumber },
+                  organizationId: broadcast.organizationId
+                }
+              });
+
+              if (conversation) {
+                await (prisma as any).conversation.update({
+                  where: { id: conversation.id },
+                  data: {
+                    lastMessageAt: new Date(),
+                    lastMessagePreview: `[Template: ${broadcast.templateName}]`,
+                    broadcastId: broadcast.id,
+                    broadcastName: broadcast.name,
+                    isReply: false, // Reset reply status since we just sent a new broadcast
+                  }
+                });
+              }
             } else {
               await (prisma as any).broadcastRecipient.update({
                 where: { id: recipient.id },

@@ -738,8 +738,8 @@ const handleIncomingMessage = async (orgId: string, message: any, contactInfo: a
         conversation,
       });
     }
-  } else if (!conversation.isReply) {
-    // Check if this is a reply to a broadcast for an existing conversation
+  } else {
+    // Check if this is a reply to a broadcast or a manual template
     const recentBroadcastRecipient = await (prisma as any).broadcastRecipient.findFirst({
       where: { 
         phoneNumber: waId,
@@ -749,8 +749,28 @@ const handleIncomingMessage = async (orgId: string, message: any, contactInfo: a
       include: { broadcast: { select: { id: true, name: true } } }
     });
 
-    if (recentBroadcastRecipient && !conversation.broadcastId) {
-      // Update existing conversation with broadcast info
+    const isManualTemplate = conversation.lastMessagePreview?.includes('[Template:');
+    
+    // If it's a broadcast reply and the ID has changed, update it
+    
+    // Debug Logging
+    const broadcastSentTime = recentBroadcastRecipient ? new Date(recentBroadcastRecipient.sentAt).getTime() : 0;
+    const lastMsgTime = conversation.lastMessageAt ? new Date(conversation.lastMessageAt).getTime() : 0;
+    
+    console.log(`🔍 [Reply Check] Conv ${conversation.id}`);
+    console.log(`   - Broadcast: ${recentBroadcastRecipient?.broadcast?.name} (Sent: ${new Date(broadcastSentTime).toISOString()})`);
+    console.log(`   - Last Msg: ${conversation.lastMessagePreview} (At: ${new Date(lastMsgTime).toISOString()})`);
+    console.log(`   - Is Manual Mode? ${conversation.broadcastId === null && !!conversation.broadcastName}`);
+
+    // CRITICAL FIX: Only overwrite if the broadcast was sent AFTER the last message
+    // AND we are not currently in a "Manual Template" state (broadcastId is null but name is set)
+    // unless the broadcast is strictly newer.
+    const isBroadcastNewer = recentBroadcastRecipient && 
+      lastMsgTime > 0 && 
+      broadcastSentTime > lastMsgTime;
+
+    if (recentBroadcastRecipient && (recentBroadcastRecipient.broadcast.id !== conversation.broadcastId) && isBroadcastNewer) {
+      console.log('🔄 Overwriting metadata: Broadcast is NEWER than last message.');
       conversation = await (prisma as any).conversation.update({
         where: { id: conversation.id },
         data: {
@@ -760,13 +780,19 @@ const handleIncomingMessage = async (orgId: string, message: any, contactInfo: a
         }
       });
 
-      // Update broadcast reply count
       await (prisma as any).broadcast.update({
         where: { id: recentBroadcastRecipient.broadcast.id },
         data: { replyCount: { increment: 1 } }
       });
-
-      console.log('✅ Existing conversation linked to broadcast:', recentBroadcastRecipient.broadcast.name);
+    } else {
+      console.log('🛡️ Preserving current metadata (Manual Template or older broadcast). Setting isReply=true.');
+      // If no new broadcast, but it was a manual template or already linked, just set isReply
+      if (!conversation.isReply) {
+        conversation = await (prisma as any).conversation.update({
+          where: { id: conversation.id },
+          data: { isReply: true }
+        });
+      }
     }
   }
 
