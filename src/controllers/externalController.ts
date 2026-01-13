@@ -300,6 +300,8 @@ export const updateSettings = async (req: AuthRequest, res: Response): Promise<v
     const { apiKey, externalWebhookUrl, externalWebhookSecret } = req.body;
     const organizationId = req.user?.organizationId;
 
+    console.log('📦 updateSettings called:', { orgId, apiKey, externalWebhookUrl, externalWebhookSecret });
+
     if (organizationId && organizationId !== orgId && req.user?.role !== 'SUPER_ADMIN') {
       res.status(403).json({ error: 'Access denied' });
       return;
@@ -314,12 +316,18 @@ export const updateSettings = async (req: AuthRequest, res: Response): Promise<v
       }
     });
 
+    console.log('✅ Organization updated:', { 
+      apiKey: updated.apiKey, 
+      externalWebhookUrl: updated.externalWebhookUrl 
+    });
+
     res.json({
       apiKey: updated.apiKey,
       externalWebhookUrl: updated.externalWebhookUrl,
       externalWebhookSecret: updated.externalWebhookSecret
     });
   } catch (error: any) {
+    console.error('❌ updateSettings error:', error);
     res.status(500).json({ error: error.message });
   }
 };
