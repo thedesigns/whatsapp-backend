@@ -92,6 +92,42 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    // Check organization status (SUPER_ADMIN bypasses these checks)
+    if (user.organizationId && user.role !== 'SUPER_ADMIN') {
+      const org = await (prisma as any).organization.findUnique({
+        where: { id: user.organizationId },
+        select: { isActive: true, subscriptionStatus: true, subscriptionExpiry: true, name: true },
+      });
+
+      if (!org) {
+        res.status(401).json({ error: 'Organization not found' });
+        return;
+      }
+
+      // Check if organization is manually disabled
+      if (!org.isActive) {
+        res.status(403).json({ error: 'Your organization is currently disabled. Please contact support.' });
+        return;
+      }
+
+      // Check if subscription is closed
+      if (org.subscriptionStatus === 'CLOSED') {
+        res.status(403).json({ error: 'Your organization subscription is closed. Please contact support to reactivate.' });
+        return;
+      }
+
+      // Check if subscription is expired
+      if (org.subscriptionExpiry && new Date(org.subscriptionExpiry) < new Date()) {
+        // Auto-update to CLOSED status
+        await (prisma as any).organization.update({
+          where: { id: user.organizationId },
+          data: { subscriptionStatus: 'CLOSED' },
+        });
+        res.status(403).json({ error: 'Your subscription has expired. Please renew to continue using the service.' });
+        return;
+      }
+    }
+
     const token = generateToken(user.id);
 
     // Update last seen
