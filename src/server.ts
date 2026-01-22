@@ -8,6 +8,8 @@ import { prisma } from './config/database.js';
 import { setupSocketHandlers } from './services/socketService.js';
 import { initScheduler } from './services/schedulerService.js';
 import { initIntegrationScheduler } from './services/integrationScheduler.js';
+import { Redis } from 'ioredis';
+import { createAdapter } from '@socket.io/redis-adapter';
 
 // Routes
 import authRoutes from './routes/authRoutes.js';
@@ -55,6 +57,14 @@ const io = new SocketServer(httpServer, {
   },
 });
 
+// Redis Adapter for scaling
+if (process.env.REDIS_URL) {
+  const pubClient = new Redis(process.env.REDIS_URL);
+  const subClient = pubClient.duplicate();
+  io.adapter(createAdapter(pubClient, subClient));
+  console.log('🔄 Socket.io Redis adapter initialized');
+}
+
 // Make io available globally
 declare global {
   var io: SocketServer;
@@ -82,6 +92,7 @@ app.use((req, res, next) => {
 
 // Static files
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+app.use('/images', express.static(path.join(process.cwd(), 'public/images')));
 
 // Request logging middleware
 app.use((req: Request, _res: Response, next: NextFunction) => {
